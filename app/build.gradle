@@ -1,9 +1,12 @@
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
 apply plugin: 'com.android.application'
 
 apply plugin: 'kotlin-android'
 
 apply plugin: 'kotlin-android-extensions'
-
+apply plugin: 'channel'
 android {
     compileSdkVersion 28
     buildToolsVersion "29.0.0"
@@ -21,14 +24,78 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    signingConfigs {
+        release {
+            storeFile file("GradleDemo.jks")
+            storePassword "GradleDemo"
+            keyAlias "GradleDemo"
+            keyPassword "GradleDemo"
+            v1SigningEnabled true
+            v2SigningEnabled false
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            zipAlignEnabled true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+}
+
+channel {//该配置只在命令行构建测试包时生效，渠道信息通过命令行传入
+
+    channelFile = file("../channelFile.txt")
+    //多渠道包的输出目录
+    baseOutputDir = new File("${project.buildDir}/channelRoot/test")
+    //多渠道包的命名规则，appname_guanwanng 默认为：${appName}-${versionName}-${versionCode}-${flavorName}-${buildType}
+//    apkNameFormat = getCurrentFlavorName() + '_${flavorName}_${buildType}'
+    apkNameFormat = '${appName}_${flavorName}_${buildType}'
+    //快速模式：生成渠道包时不进行校验（速度可以提升10倍以上，默认为false）
+    isFastMode = true
+    //buildTime的时间格式，默认格式：yyyyMMdd-HHmmss
+    buildTimeDateFormat = 'yyyyMMdd-HH:mm:ss'
+    //低内存模式（仅针对V2签名，默认为false）：只把签名块、中央目录和EOCD读取到内存，不把最大头的内容块读取到内存，在手机上合成APK时，可以使用该模式
+    lowMemory = false
+}
+
+//返回对应的 Flavor name
+def getCurrentFlavorName() {
+    Gradle gradle = getGradle()
+    String tskReqStr = gradle.getStartParameter().getTaskRequests().toString()
+
+    Pattern pattern
+
+    if (tskReqStr.contains("assemble"))
+        pattern = Pattern.compile("assemble(\\w+)(Release|Debug)")
+    else if (tskReqStr.contains("channel"))
+        pattern = Pattern.compile("channel(\\w+)(Release|Debug)")
+    else
+        pattern = Pattern.compile("generate(\\w+)(Release|Debug)")
+
+    Matcher matcher = pattern.matcher(tskReqStr)
+
+    if (matcher.find())
+        return matcher.group(1).toLowerCase()
+    else {
+        println "NO MATCH FOUND"
+        return ""
+    }
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation"org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     implementation 'com.android.support:appcompat-v7:28.0.0'
     implementation 'com.android.support.constraint:constraint-layout:1.1.3'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+    //VasDolly打包
+    api 'com.leon.channel:helper:2.0.3'
 }
