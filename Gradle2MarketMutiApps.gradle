@@ -1,0 +1,166 @@
+//import com.digitalcloud.cashloan.plugin.task.AliUploadTask
+//import com.digitalcloud.cashloan.plugin.task.QiNiuUploadTask
+
+/**
+ * 为市场推广同事做的Jenkins动态构建渠道包
+ * - Jenkins中输入渠道信息
+ * - 动态构建指定渠道包并上传到七牛云
+ * - 不支持加固（一定要注意），如果实在有加固的需求，以后有时间再做
+ * @author Eason
+ */
+
+String getCommandLineChannel() {
+    if (project.hasProperty("marketChannel")) {
+        return project.marketChannel
+    } else if (getDebug()=='true') {
+        return "test"
+    }
+    return ""
+}
+
+//获取 用户传入的 App 参数，用于确认用户需要编译哪一个App的渠道包
+String getCommandLineApp() {
+    if (project.hasProperty("app")) {
+        return project.app
+    }
+//    不传 app 就默认 xed
+    return "app1"
+}
+
+//是否编译测试版
+String getDebug() {
+    if (project.hasProperty("debug")) {
+        return project.debug
+    }
+    return false
+}
+
+
+//返回传入的app参数对应的 Bucket Name ，
+String getCurrentBucketName() {
+    if (getDebug()=='true') {//测试包只上传到 存放测试包的bucket
+        return "all-apks-test"
+    } else {
+        switch (getCommandLineApp()) {
+            case "app1":
+                return "apk-app1"
+            case "app2":
+                return "apk-app1"
+            case "app3":
+                return "apk-app2"
+            default:
+                throw new GradleException("getCurrentBucketName 不能识别 ${getCommandLineApp()} ,请传入正确的应用代号")
+        }
+    }
+}
+
+String getCurrentAppBuildCommand() {
+    def commandStr = "channel"
+    switch (getCommandLineApp()) {
+        case 'app1'://编译小鹅贷
+            commandStr = commandStr + "App1"
+            break
+        
+        case 'app2'://编译即刻有借
+            commandStr = commandStr + "App2"
+            break
+
+        case 'app3'://编译闪贷钱包
+            commandStr = commandStr + "App3"
+            break
+        default:
+            throw new GradleException("getCurrentAppBuildCommand 找不对对应需要打包的 App，App = ${getCommandLineApp()}")
+            println()
+    }
+    if (getDebug()=='true') {
+        commandStr = commandStr + "Debug"
+    } else {
+        commandStr = commandStr + "Release"
+    }
+    return commandStr
+}
+// 返回传入的app对应的编译包存放地址
+String getCurrentBuildDir() {
+    def fileDir = "/channelRoot/test/"
+    switch (getCommandLineApp()) {
+        case "app1":
+            fileDir = fileDir + "app1"
+            break
+
+        case "app2":
+            fileDir = fileDir + "app2"
+            break
+
+        case "app3":
+            fileDir = fileDir + "app3"
+            break
+
+        default:
+            throw new GradleException("getCurrentBuildDir 不能识别 ${getCommandLineApp()} ,请传入正确的应用代号")
+    }
+    if (getDebug()=='true') {
+        fileDir = fileDir + "/debug"
+    } else {
+        fileDir = fileDir + "/release"
+    }
+    return "${project.buildDir}" + fileDir
+}
+
+/**
+ * 根据命令行传入的渠道信息，动态构建渠道包并上传到七牛云
+ */
+task buildMarketChannelApk(type: Exec) {
+    doFirst {
+        def channel = getCommandLineChannel()
+        def app = getCommandLineApp()
+        println "校验渠道信息.选择的应用为：${app} 输入的渠道信息为：channel = ${channel}  bucketName = ${getCurrentBucketName()} fileDir = ${getCurrentBuildDir()} ===================>>>>"
+        if (channel == null || channel.length() == 0) {
+            if (getDebug()=='true') {
+                channel = "test"
+            } else {
+                throw new GradleException("请传入正确的渠道信息，以英文逗号分隔")
+            }
+        }
+    }
+    group = "market"
+    description = "根据命令行传入的渠道信息，动态构建渠道包"
+
+    workingDir "${rootProject.projectDir}"
+
+    if (org.gradle.internal.os.OperatingSystem.current() == org.gradle.internal.os.OperatingSystem.WINDOWS) {
+        //windows
+        commandLine 'cmd', '/k', 'gradlew -Dorg.gradle.jvmargs=-Xmx1536m', '-Dfile.encoding=UTF-8', "-Pchannels=${getCommandLineChannel()}",  "-Pdebug=${getDebug()}",  "${getCurrentAppBuildCommand()}"
+    } else { //linux ,macos
+        commandLine 'gradlew', '-Dorg.gradle.jvmargs=-Xmx1536m', '-Dfile.encoding=UTF-8', "-Pchannels=${getCommandLineChannel()}",  "-Pdebug=${getDebug()}",  "${getCurrentAppBuildCommand()}"
+    }
+
+    doLast {
+        println "${getCommandLineApp()} 渠道包已构建完毕.  输入的渠道信息为：{${getCommandLineChannel()}} bebug=${getDebug()} ===================>>>>"
+}
+}
+
+///**
+// * 构建完成之后自动上传到阿里云，用于Jenkins构建
+// */
+//task uploadMarketChannelApkToAli(type: AliUploadTask, dependsOn: 'buildMarketChannelApk') {
+//    group = "market"
+//    description = "构建完自动上传市场渠道包到阿里云"
+//    bucketName getCurrentBucketName()
+//    fileDir getCurrentBuildDir()
+//    doLast {
+//        println "${getCommandLineApp()} 渠道包已成功上传至阿里云${getCurrentBucketName()}文件夹下.  ===================>>>>"
+//    }
+//}
+//
+///**
+// * 构建完成之后自动上传到七牛云，用于Jenkins构建
+// */
+//task uploadMarketChannelApkToQiniu(type: QiNiuUploadTask, dependsOn: 'buildMarketChannelApk') {
+//    group = "market"
+//    description = "构建完自动上传市场渠道包到七牛云"
+//    bucketName "cashloan-channel-promotion"
+//    fileDir "${project.buildDir}/channelRoot/test/base/release"
+//    doLast {
+//        println "渠道包已成功上传至七牛云{cashloan-channel-promotion}文件夹下.  ===================>>>>"
+//    }
+//}

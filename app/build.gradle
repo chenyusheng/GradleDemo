@@ -99,3 +99,6 @@ dependencies {
     //VasDolly打包
     api 'com.leon.channel:helper:2.0.3'
 }
+
+apply from: rootProject.file('Gradle2MarketMutiApps.gradle')
+apply from: rootProject.file('Gradle2Market.gradle')

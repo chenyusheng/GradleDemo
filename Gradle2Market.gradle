@@ -1,0 +1,91 @@
+/**
+ * 为市场推广同事做的Jenkins动态构建渠道包
+ * - Jenkins中输入渠道信息
+ * - 不支持加固（一定要注意），如果实在有加固的需求，以后有时间再做
+ * @author Eason
+ */
+
+
+/**
+ * 在命令行中取回marketchannel的参数
+ * @return
+ */
+String getCommandLineChannel() {
+    if (project.hasProperty("marketChannel")) {
+        return project.marketChannel
+    } else if (getDebug() == 'true') {
+        return "test"
+    }
+    return ""
+}
+
+/**
+ * 在命令行获取debug参数
+ * 代表是否编译测试版
+ * @return
+ */
+String getDebug() {
+    if (project.hasProperty("debug")) {
+        return project.debug
+    }
+    return false
+}
+
+/**
+ * 组装对应的编译命令
+ * @return
+ */
+String getCurrentAppBuildCommand() {
+    def commandStr = "channel"
+    if (getDebug() == 'true') {
+        commandStr = commandStr + "Debug"
+    } else {
+        commandStr = commandStr + "Release"
+    }
+    return commandStr
+}
+/**
+ * 返回对应的编译包存放地址
+ * @return
+ */
+String getCurrentBuildDir() {
+    def fileDir = "/channelRoot/test/"
+    if (getDebug() == 'true') {
+        fileDir = fileDir + "/debug"
+    } else {
+        fileDir = fileDir + "/release"
+    }
+    return "${project.buildDir}" + fileDir
+}
+
+/**
+ * 根据命令行传入的渠道信息，动态构建渠道包
+ */
+task buildChannelApk(type: Exec) {
+    doFirst {
+        def channel = getCommandLineChannel()
+        println "校验渠道信息 输入的渠道信息为：channel = ${channel} fileDir = ${getCurrentBuildDir()} ===================>>>>"
+        if (channel == null || channel.length() == 0) {
+            if (getDebug() == 'true') {
+                channel = "test"
+            } else {
+                throw new GradleException("请传入正确的渠道信息，以英文逗号分隔")
+            }
+        }
+    }
+    group = "market"
+    description = "根据命令行传入的渠道信息，动态构建渠道包"
+
+    workingDir "${rootProject.projectDir}"
+
+    if (org.gradle.internal.os.OperatingSystem.current() == org.gradle.internal.os.OperatingSystem.WINDOWS) {
+        //windows
+        commandLine 'cmd', '/k', 'gradlew -Dorg.gradle.jvmargs=-Xmx1536m', '-Dfile.encoding=UTF-8', "-Pchannels=${getCommandLineChannel()}", "-Pdebug=${getDebug()}", "${getCurrentAppBuildCommand()}"
+    } else { //linux ,macos
+        commandLine 'gradlew', '-Dorg.gradle.jvmargs=-Xmx1536m', '-Dfile.encoding=UTF-8', "-Pchannels=${getCommandLineChannel()}", "-Pdebug=${getDebug()}", "${getCurrentAppBuildCommand()}"
+    }
+
+    doLast {
+        println "渠道包已构建完毕.  输入的渠道信息为：{${getCommandLineChannel()}} bebug=${getDebug()} ===================>>>>"
+    }
+}
